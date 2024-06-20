@@ -16,6 +16,7 @@ resource "aws_internet_gateway" "main" {
   tags = merge(local.common_tags, { Name = "main-igw" })
 }
 
+
 # Create a public subnet
 resource "aws_subnet" "public" {
   vpc_id                  = aws_vpc.custom.id
