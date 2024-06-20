@@ -104,6 +104,7 @@ resource "aws_security_group" "source" {
   tags = local.common_tags
 }
 
+
 resource "aws_security_group" "compliant" {
   name = "compliant-sg"
 
