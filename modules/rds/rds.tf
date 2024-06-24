@@ -33,7 +33,7 @@ resource "aws_db_parameter_group" "this" {
 }
 
 
-resource "aws_db_instance" "this" {
+resource "aws_db_instance" "this" {  
   identifier           = "${var.project_name}amit"
   instance_class       = var.instance_class
   allocated_storage    = var.storage_size
@@ -44,4 +44,10 @@ resource "aws_db_instance" "this" {
   db_subnet_group_name = aws_db_subnet_group.this.name
   publicly_accessible  = false
   skip_final_snapshot  = true
+
+
+  tags = {
+    Name    = "Amit-DB"
+    Creator = "Amit"
+  }
 }

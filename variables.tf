@@ -36,3 +36,7 @@ variable "db_credentials" {
 
   sensitive = true
 }
+
+variable "db_end_point" {
+  type = string
+}

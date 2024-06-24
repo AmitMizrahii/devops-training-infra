@@ -26,6 +26,15 @@ resource "aws_subnet" "public" {
   tags = merge(local.common_tags, { Name = "public-subnet" })
 }
 
+# Create a public subnet
+resource "aws_subnet" "public2" {
+  vpc_id                  = aws_vpc.custom.id
+  cidr_block              = "10.0.4.0/24"
+  map_public_ip_on_launch = true
+  availability_zone       = "us-east-1a"
+
+  tags = merge(local.common_tags, { Name = "public-subnet2" })
+}
 
 # Create a private subnet
 resource "aws_subnet" "private" {
@@ -55,12 +64,28 @@ resource "aws_route_table" "public" {
   tags = merge(local.common_tags, { Name = "public-route-table" })
 }
 
+resource "aws_route_table" "public2" {
+  vpc_id = aws_vpc.custom.id
+
+  route {
+    cidr_block = "0.0.0.0/0"
+    gateway_id = aws_internet_gateway.main.id
+  }
+
+  tags = merge(local.common_tags, { Name = "public-route-table2" })
+}
+
 # Associate the public subnet with the public route table
 resource "aws_route_table_association" "public" {
   subnet_id      = aws_subnet.public.id
   route_table_id = aws_route_table.public.id
 }
 
+resource "aws_route_table_association" "public2" {
+  subnet_id      = aws_subnet.public2.id
+  route_table_id = aws_route_table.public2.id
+
+}
 # Create a NAT Gateway in the public subnet
 resource "aws_eip" "nat" {
   domain = "vpc"
@@ -72,6 +97,8 @@ resource "aws_nat_gateway" "main" {
 
   tags = merge(local.common_tags, { Name = "main-nat-gateway" })
 }
+
+
 
 # Create a route table for the private subnet
 resource "aws_route_table" "private" {
@@ -95,6 +122,7 @@ resource "aws_route_table_association" "private2" {
   subnet_id      = aws_subnet.private2.id
   route_table_id = aws_route_table.private.id
 }
+
 
 resource "aws_security_group" "source" {
   name = "source-sg"
@@ -134,6 +162,14 @@ resource "aws_vpc_security_group_ingress_rule" "db" {
   to_port                      = 5432
   ip_protocol                  = "tcp"
 }
+resource "aws_vpc_security_group_ingress_rule" "db-bastion" {
+  security_group_id = aws_security_group.compliant.id
+
+  referenced_security_group_id = aws_security_group.bastion.id
+  from_port                    = 5432
+  to_port                      = 5432
+  ip_protocol                  = "tcp"
+}
 
 resource "aws_vpc_security_group_ingress_rule" "https" {
   security_group_id = aws_security_group.non_compliant.id
@@ -142,4 +178,72 @@ resource "aws_vpc_security_group_ingress_rule" "https" {
   from_port   = 443
   to_port     = 443
   ip_protocol = "tcp"
+}
+
+
+
+resource "aws_security_group" "bastion" {
+  vpc_id = aws_vpc.custom.id
+
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+
+resource "aws_instance" "bastion" {
+  ami                         = "ami-08a0d1e16fc3f61ea" # Amazon Linux 2 AMI
+  instance_type               = "t2.micro"
+  subnet_id                   = aws_subnet.public.id
+  associate_public_ip_address = true
+
+  tags = merge(local.common_tags, { Name = "BastionHost" })
+}
+
+
+
+resource "aws_security_group" "redis_sg" {
+  vpc_id = aws_vpc.custom.id
+
+  ingress {
+    from_port   = 6379
+    to_port     = 6379
+    protocol    = "tcp"
+    cidr_blocks = ["10.0.0.0/16"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+resource "aws_elasticache_subnet_group" "redis" {
+  name       = "redis-subnet-group"
+  subnet_ids = aws_subnet.public[*].id
+}
+
+resource "aws_elasticache_cluster" "redis" {
+  cluster_id      = "amit-redis-cluster"
+  engine          = "redis"
+  node_type       = "cache.t2.micro"
+  num_cache_nodes = 1
+
+  parameter_group_name = "default.redis7"
+  subnet_group_name    = aws_elasticache_subnet_group.redis.name
+  security_group_ids   = [aws_security_group.redis_sg.id]
+
+  port = 6379
 }
