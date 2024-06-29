@@ -2,14 +2,15 @@ locals {
   container_name = "amit-app-container"
 }
 
+
 resource "aws_security_group" "ecs_security_group" {
   vpc_id = aws_vpc.custom.id
 
   ingress {
-    from_port   = 8080
-    to_port     = 8080
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    from_port       = 8080
+    to_port         = 8080
+    protocol        = "tcp"
+    security_groups = [aws_security_group.lb.id]
   }
 
   egress {
@@ -18,9 +19,28 @@ resource "aws_security_group" "ecs_security_group" {
     protocol    = "-1"
     cidr_blocks = ["0.0.0.0/0"]
   }
-
   tags = merge(local.common_tags, { Name = "ecs-security-group" })
 }
+
+# resource "aws_security_group" "ecs_security_group" {
+#   vpc_id = aws_vpc.custom.id
+
+#   ingress {
+#     from_port   = 8080
+#     to_port     = 8080
+#     protocol    = "tcp"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+#   egress {
+#     from_port   = 0
+#     to_port     = 0
+#     protocol    = "-1"
+#     cidr_blocks = ["0.0.0.0/0"]
+#   }
+
+# tags = merge(local.common_tags, { Name = "ecs-security-group" })
+# }
 
 resource "aws_ecs_cluster" "my_ecs_cluster" {
   name = "amit-ecs-cluster"
@@ -61,6 +81,7 @@ resource "aws_ecs_task_definition" "my_task_definition" {
     }
     portMappings = [{
       containerPort = 8080
+      hostPort      = 8080
       protocol      = "tcp"
     }]
     environment = [
@@ -96,7 +117,7 @@ resource "aws_ecs_service" "my_service" {
   desired_count   = 1
   launch_type     = "FARGATE"
   network_configuration {
-    subnets          = [aws_subnet.public.id]
+    subnets          = [aws_subnet.public.id, aws_subnet.public2.id]
     security_groups  = [aws_security_group.ecs_security_group.id]
     assign_public_ip = true
   }
@@ -110,11 +131,29 @@ resource "aws_ecs_service" "my_service" {
   tags = merge(local.common_tags, { Name = "amit-ecs-service" })
 }
 
+resource "aws_security_group" "lb" {
+  vpc_id = aws_vpc.custom.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 resource "aws_lb" "my_lb" {
   name               = "amit-lb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.ecs_security_group.id]
+  security_groups    = [aws_security_group.lb.id]
 
   subnets = [
     aws_subnet.public.id,
@@ -133,7 +172,8 @@ resource "aws_lb_target_group" "my_target_group" {
   target_type = "ip"
   health_check {
     path     = "/health"
-    protocol = "http"
+    protocol = "HTTP"
+    port     = 8080
   }
 
   tags = merge(local.common_tags, { Name = "my-tg" })
@@ -164,7 +204,7 @@ resource "aws_iam_role_policy_attachment" "ecs_task_execution_policy" {
 
 resource "aws_lb_listener" "my_listener" {
   load_balancer_arn = aws_lb.my_lb.arn
-  port              = 8080
+  port              = 80
   protocol          = "HTTP"
 
   default_action {
@@ -180,4 +220,66 @@ resource "aws_cloudwatch_log_group" "ecs_log_group" {
   retention_in_days = 7
 
   tags = local.common_tags
+}
+
+
+
+
+
+resource "aws_appautoscaling_target" "ecs" {
+  max_capacity       = 4
+  min_capacity       = 1
+  resource_id        = "service/${aws_ecs_cluster.my_ecs_cluster.name}/${aws_ecs_service.my_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "scale_up" {
+  name               = "scale-up"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value = 80
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 300
+  }
+}
+
+
+resource "aws_appautoscaling_policy" "scale_down" {
+  name               = "scale-down"
+  policy_type        = "TargetTrackingScaling"
+  resource_id        = aws_appautoscaling_target.ecs.resource_id
+  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
+  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
+
+  target_tracking_scaling_policy_configuration {
+    target_value = 25.0
+
+    predefined_metric_specification {
+      predefined_metric_type = "ECSServiceAverageCPUUtilization"
+    }
+
+    scale_in_cooldown  = 300
+    scale_out_cooldown = 300
+  }
+}
+
+
+
+resource "aws_vpc_security_group_ingress_rule" "ecs" {
+  security_group_id = aws_security_group.ecs_security_group.id
+
+  referenced_security_group_id = aws_security_group.lb.id
+  from_port                    = 8080
+  to_port                      = 8080
+  ip_protocol                  = "tcp"
 }

@@ -100,6 +100,7 @@ resource "aws_nat_gateway" "main" {
 
 
 
+
 # Create a route table for the private subnet
 resource "aws_route_table" "private" {
   vpc_id = aws_vpc.custom.id
