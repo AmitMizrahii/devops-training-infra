@@ -298,7 +298,7 @@ resource "aws_appautoscaling_policy" "scale_out" {
   policy_type        = "StepScaling"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
-  depends_on         = [aws_appautoscaling_target.target]
+  depends_on = [ aws_appautoscaling_target.target ]
 
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
@@ -318,7 +318,7 @@ resource "aws_appautoscaling_policy" "scale_in" {
   policy_type        = "StepScaling"
   scalable_dimension = "ecs:service:DesiredCount"
   service_namespace  = "ecs"
-  depends_on         = [aws_appautoscaling_target.target]
+depends_on = [ aws_appautoscaling_target.target ]
   step_scaling_policy_configuration {
     adjustment_type         = "ChangeInCapacity"
     cooldown                = 30

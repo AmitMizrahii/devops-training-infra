@@ -34,7 +34,7 @@ override.tf.json
 terraform.rc
 
 
-.dist
+dist
 
 node_modules
 # Ignore local envs

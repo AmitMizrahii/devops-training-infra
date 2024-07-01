@@ -3,7 +3,7 @@
   "version": "1.0.0",
   "description": "An infra project to devops-training-app-Amit that implements IaC with Terraform",
   "main": "index.js",
-  "type": "module",
+  "type": "commonjs",
   "scripts": {
     "apply": "terraform apply",
     "plan": "terraform plan",
@@ -22,11 +22,12 @@
   },
   "homepage": "https://github.com/AmitMizrahii/devops-training-infra#readme",
   "dependencies": {
-    "axios": "^1.7.2"
+    "axios": "^1.7.2",
+    "pino": "^9.2.0"
   },
   "devDependencies": {
     "@types/node": "^20.14.9",
-    "typescript": "^5.5.2",
-    "ts-node": "^10.9.2"
+    "ts-node": "^10.9.2",
+    "typescript": "^5.5.2"
   }
 }
