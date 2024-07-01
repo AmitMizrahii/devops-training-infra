@@ -117,7 +117,7 @@ resource "aws_ecs_service" "my_service" {
   desired_count   = 1
   launch_type     = "FARGATE"
   network_configuration {
-    subnets          = [aws_subnet.public.id, aws_subnet.public2.id]
+    subnets          = [aws_subnet.private.id, aws_subnet.private2.id]
     security_groups  = [aws_security_group.ecs_security_group.id]
     assign_public_ip = true
   }
@@ -225,56 +225,6 @@ resource "aws_cloudwatch_log_group" "ecs_log_group" {
 
 
 
-
-resource "aws_appautoscaling_target" "ecs" {
-  max_capacity       = 4
-  min_capacity       = 1
-  resource_id        = "service/${aws_ecs_cluster.my_ecs_cluster.name}/${aws_ecs_service.my_service.name}"
-  scalable_dimension = "ecs:service:DesiredCount"
-  service_namespace  = "ecs"
-}
-
-resource "aws_appautoscaling_policy" "scale_up" {
-  name               = "scale-up"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    target_value = 80
-
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 300
-  }
-}
-
-
-resource "aws_appautoscaling_policy" "scale_down" {
-  name               = "scale-down"
-  policy_type        = "TargetTrackingScaling"
-  resource_id        = aws_appautoscaling_target.ecs.resource_id
-  scalable_dimension = aws_appautoscaling_target.ecs.scalable_dimension
-  service_namespace  = aws_appautoscaling_target.ecs.service_namespace
-
-  target_tracking_scaling_policy_configuration {
-    target_value = 25.0
-
-    predefined_metric_specification {
-      predefined_metric_type = "ECSServiceAverageCPUUtilization"
-    }
-
-    scale_in_cooldown  = 300
-    scale_out_cooldown = 300
-  }
-}
-
-
-
 resource "aws_vpc_security_group_ingress_rule" "ecs" {
   security_group_id = aws_security_group.ecs_security_group.id
 
@@ -282,4 +232,101 @@ resource "aws_vpc_security_group_ingress_rule" "ecs" {
   from_port                    = 8080
   to_port                      = 8080
   ip_protocol                  = "tcp"
+}
+
+
+#########################
+# cloud watch CPU alarams
+#########################
+resource "aws_cloudwatch_metric_alarm" "scale_out" {
+  alarm_name          = "cpu-utilization-high"
+  comparison_operator = "GreaterThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = "30"
+  statistic           = "Average"
+  threshold           = "5"
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.my_ecs_cluster.name
+    ServiceName = aws_ecs_service.my_service.name
+  }
+
+  alarm_description = "This metric monitors ECS CPU utilization"
+  alarm_actions     = [aws_appautoscaling_policy.scale_out.arn]
+
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_in" {
+  alarm_name          = "cpu-utilization-low"
+  comparison_operator = "LessThanOrEqualToThreshold"
+  evaluation_periods  = "2"
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/ECS"
+  period              = "30"
+  statistic           = "Average"
+  threshold           = "2"
+
+  dimensions = {
+    ClusterName = aws_ecs_cluster.my_ecs_cluster.name
+    ServiceName = aws_ecs_service.my_service.name
+  }
+  alarm_actions = [aws_appautoscaling_policy.scale_in.arn]
+
+
+  alarm_description = "This metric monitors ECS CPU utilization"
+}
+
+
+#########################
+# application autoscale policy
+#########################
+
+
+resource "aws_appautoscaling_target" "target" {
+  max_capacity       = 10
+  min_capacity       = 1
+  resource_id        = "service/${aws_ecs_cluster.my_ecs_cluster.name}/${aws_ecs_service.my_service.name}"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+}
+
+resource "aws_appautoscaling_policy" "scale_out" {
+  name               = "scale-out"
+  resource_id        = "service/${aws_ecs_cluster.my_ecs_cluster.name}/${aws_ecs_service.my_service.name}"
+  policy_type        = "StepScaling"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+  depends_on         = [aws_appautoscaling_target.target]
+
+  step_scaling_policy_configuration {
+    adjustment_type         = "ChangeInCapacity"
+    cooldown                = 30
+    metric_aggregation_type = "Average"
+
+    step_adjustment {
+      scaling_adjustment          = 1
+      metric_interval_lower_bound = 0
+    }
+  }
+}
+
+resource "aws_appautoscaling_policy" "scale_in" {
+  name               = "scale-in"
+  resource_id        = "service/${aws_ecs_cluster.my_ecs_cluster.name}/${aws_ecs_service.my_service.name}"
+  policy_type        = "StepScaling"
+  scalable_dimension = "ecs:service:DesiredCount"
+  service_namespace  = "ecs"
+  depends_on         = [aws_appautoscaling_target.target]
+  step_scaling_policy_configuration {
+    adjustment_type         = "ChangeInCapacity"
+    cooldown                = 30
+    metric_aggregation_type = "Average"
+
+    step_adjustment {
+      scaling_adjustment          = -1
+      metric_interval_upper_bound = 0
+    }
+  }
 }

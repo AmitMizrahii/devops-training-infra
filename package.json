@@ -1,0 +1,32 @@
+{
+  "name": "devops-training-infra",
+  "version": "1.0.0",
+  "description": "An infra project to devops-training-app-Amit that implements IaC with Terraform",
+  "main": "index.js",
+  "type": "module",
+  "scripts": {
+    "apply": "terraform apply",
+    "plan": "terraform plan",
+    "build:load-test": "tsc -p tsconfig.json",
+    "run:load-test": "node ./dist/load-tests"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AmitMizrahii/devops-training-infra.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/AmitMizrahii/devops-training-infra/issues"
+  },
+  "homepage": "https://github.com/AmitMizrahii/devops-training-infra#readme",
+  "dependencies": {
+    "axios": "^1.7.2"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "typescript": "^5.5.2",
+    "ts-node": "^10.9.2"
+  }
+}
